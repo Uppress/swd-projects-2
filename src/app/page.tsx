@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { getProjects } from "@/lib/queries";
+import NewProjectForm from "@/app/components/new-project-form";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +52,10 @@ export default async function HomePage() {
           </div>
         </section>
 
+        <div className="mb-10">
+          <NewProjectForm />
+        </div>
+
         <section aria-labelledby="project-list-heading">
           <div className="mb-4 flex items-center justify-between border-b border-[var(--line)] pb-3">
             <h2 id="project-list-heading" className="text-sm font-semibold">All projects</h2>
@@ -69,9 +75,10 @@ export default async function HomePage() {
                   : Math.round((project.doneCount / project.taskCount) * 100);
 
                 return (
-                  <article
+                  <Link
+                    href={`/projects/${project.id}`}
                     key={project.id}
-                    className="project-card overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--paper)] shadow-[0_8px_24px_rgba(29,49,44,0.035)]"
+                    className="project-card block overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--paper)] shadow-[0_8px_24px_rgba(29,49,44,0.035)] transition-shadow hover:shadow-[0_12px_30px_rgba(29,49,44,0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)]"
                   >
                     <div className="h-1.5" style={{ backgroundColor: project.color }} />
                     <div className="p-5 sm:p-6">
@@ -112,7 +119,7 @@ export default async function HomePage() {
                         />
                       </div>
                     </div>
-                  </article>
+                  </Link>
                 );
               })}
             </div>
