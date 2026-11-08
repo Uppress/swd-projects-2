@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import DeleteProjectForm from "@/app/components/delete-project-form";
 import KanbanBoard from "@/app/components/kanban-board";
@@ -9,6 +10,28 @@ export const dynamic = "force-dynamic";
 
 const priorities = ["low", "medium", "high"] as const;
 
+type ProjectPageProps = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ priority?: string | string[]; q?: string | string[] }>;
+};
+
+export async function generateMetadata({ params }: Pick<ProjectPageProps, "params">): Promise<Metadata> {
+  const { id } = await params;
+  const projectId = Number(id);
+
+  if (!Number.isSafeInteger(projectId) || projectId < 1) {
+    return { title: "Project not found | Fieldnotes" };
+  }
+
+  const project = await getProject(projectId);
+  if (!project) return { title: "Project not found | Fieldnotes" };
+
+  return {
+    title: `${project.name} | Fieldnotes`,
+    description: project.description || `Tasks and progress for ${project.name}.`,
+  };
+}
+
 function isTaskPriority(value: string | undefined): value is TaskPriority {
   return priorities.some((priority) => priority === value);
 }
@@ -17,8 +40,8 @@ export default async function ProjectPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ priority?: string | string[]; q?: string | string[] }>;
+  params: ProjectPageProps["params"];
+  searchParams: ProjectPageProps["searchParams"];
 }) {
   const [{ id: idParam }, query] = await Promise.all([params, searchParams]);
   const projectId = Number(idParam);
