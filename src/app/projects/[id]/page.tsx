@@ -1,23 +1,45 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import DeleteProjectForm from "@/app/components/delete-project-form";
+import KanbanBoard from "@/app/components/kanban-board";
 import NewTaskForm from "@/app/components/new-task-form";
-import TaskControls from "@/app/components/task-controls";
-import { getProject, getTasks } from "@/lib/queries";
+import { getProject, getTasks, type TaskPriority } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id: idParam } = await params;
+const priorities = ["low", "medium", "high"] as const;
+
+function isTaskPriority(value: string | undefined): value is TaskPriority {
+  return priorities.some((priority) => priority === value);
+}
+
+export default async function ProjectPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ priority?: string | string[]; q?: string | string[] }>;
+}) {
+  const [{ id: idParam }, query] = await Promise.all([params, searchParams]);
   const projectId = Number(idParam);
 
   if (!Number.isSafeInteger(projectId) || projectId < 1) notFound();
 
-  const [project, tasks] = await Promise.all([getProject(projectId), getTasks(projectId)]);
+  const priorityParam = Array.isArray(query.priority) ? query.priority[0] : query.priority;
+  const priority = isTaskPriority(priorityParam) ? priorityParam : undefined;
+  const searchParam = Array.isArray(query.q) ? query.q[0] : query.q;
+  const search = searchParam?.trim() ?? "";
+
+  const [project, tasks] = await Promise.all([
+    getProject(projectId),
+    getTasks(projectId, { priority, search }),
+  ]);
   if (!project) notFound();
 
-  const doneCount = tasks.filter((task) => task.status === "done").length;
-  const progress = tasks.length === 0 ? 0 : Math.round((doneCount / tasks.length) * 100);
+  const progress = project.taskCount === 0
+    ? 0
+    : Math.round((project.doneCount / project.taskCount) * 100);
+  const hasFilters = Boolean(priority || search);
 
   return (
     <main className="min-h-screen px-5 pb-16 pt-6 sm:px-8 sm:pt-9">
@@ -43,42 +65,38 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           <div className="flex items-center gap-5">
             <div className="min-w-28">
               <p className="text-2xl font-semibold tabular-nums">{progress}%</p>
-              <p className="mt-1 text-xs text-[var(--muted)]">{doneCount} of {tasks.length} tasks complete</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">{project.doneCount} of {project.taskCount} tasks complete</p>
             </div>
             <DeleteProjectForm projectId={project.id} />
           </div>
         </section>
 
-        <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="mt-8 space-y-6">
           <section aria-labelledby="tasks-heading">
-            <div className="mb-4 flex items-center justify-between border-b border-[var(--line)] pb-3">
-              <h2 id="tasks-heading" className="text-sm font-semibold">Tasks</h2>
-              <span className="text-xs text-[var(--muted)]">{tasks.length} total</span>
-            </div>
-
-            {tasks.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[var(--line)] bg-white/60 px-5 py-12 text-center">
-                <p className="display-type text-2xl">Nothing on the list yet</p>
-                <p className="mt-2 text-sm text-[var(--muted)]">Add a task to get this project moving.</p>
+            <div className="mb-4 flex flex-col gap-4 border-b border-[var(--line)] pb-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 id="tasks-heading" className="text-sm font-semibold">Kanban board</h2>
+                <p className="mt-1 text-xs text-[var(--muted)]">{tasks.length} matching {tasks.length === 1 ? "task" : "tasks"}</p>
               </div>
-            ) : (
-              <ul className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
-                {tasks.map((task) => (
-                  <li key={task.id} className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <h3 className={`font-semibold ${task.status === "done" ? "text-[var(--muted)] line-through" : ""}`}>
-                        {task.title}
-                      </h3>
-                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
-                        <span className="capitalize">{task.priority} priority</span>
-                        {task.dueDate && <span>Due {task.dueDate}</span>}
-                      </div>
-                    </div>
-                    <TaskControls task={task} projectId={project.id} />
-                  </li>
-                ))}
-              </ul>
-            )}
+              <form method="get" className="flex flex-wrap items-end gap-2">
+                <div>
+                  <label htmlFor="priority-filter" className="mb-1 block text-[11px] font-semibold text-[var(--muted)]">Priority</label>
+                  <select id="priority-filter" name="priority" defaultValue={priority ?? ""} className="h-10 rounded-lg border border-[var(--line)] bg-white px-3 text-sm">
+                    <option value="">All priorities</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="task-query" className="mb-1 block text-[11px] font-semibold text-[var(--muted)]">Title</label>
+                  <input id="task-query" name="q" type="search" defaultValue={search} placeholder="Search tasks" className="h-10 w-44 rounded-lg border border-[var(--line)] bg-white px-3 text-sm" />
+                </div>
+                <button type="submit" className="h-10 rounded-lg bg-[var(--ink)] px-4 text-sm font-semibold text-white hover:bg-[var(--green)]">Filter</button>
+                {hasFilters && <Link href={`/projects/${projectId}`} className="px-2 py-2.5 text-sm font-medium text-[var(--green)] hover:underline">Clear</Link>}
+              </form>
+            </div>
+            <KanbanBoard tasks={tasks} projectId={project.id} />
           </section>
 
           <NewTaskForm projectId={project.id} />
